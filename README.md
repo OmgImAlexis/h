@@ -13,6 +13,8 @@ ssh root@server_name.tld
 mkdir /git
 mkdir /workspace
 
+# Run this to give yourself a helper function
+# We'll use this below
 makeRepo() {
     local name=$1
 
