@@ -27,7 +27,8 @@ log(){
 
 logFailure(){
     local logLine=$1
-    local exitCode="${2:-'1'}"
+    local defaultExitCode=1
+    local exitCode="${2:-defaultExitCode}"
 
     log logLine
     exit exitCode
