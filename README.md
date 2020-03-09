@@ -22,7 +22,7 @@ makeRepo() {
     mkdir /git/$name.git
     cd /git/$name.git
     git init --bare
-    curl https://raw.githubusercontent.com/OmgImAlexis/h/master/pre-receive?token=ABRZHZT2UTBTA6WPUU54CDS6N3L5U --output ./hooks/pre-receive
+    curl https://github.com/OmgImAlexis/h/raw/master/pre-receive --output ./hooks/pre-receive
     sed -i "s/NAME=\"demo\"/NAME=\"$name\"/" ./hooks/pre-receive
     chmod +x ./hooks/pre-receive
     cd $old_pwd
