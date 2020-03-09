@@ -30,8 +30,8 @@ logFailure(){
     local defaultExitCode=1
     local exitCode="${2:-defaultExitCode}"
 
-    log logLine
-    exit exitCode
+    log $logLine
+    exit $exitCode
 }
 
 appendToDockerFile(){
