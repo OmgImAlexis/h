@@ -27,10 +27,9 @@ log(){
 
 logFailure(){
     local logLine=$1
-    local defaultExitCode=1
-    local exitCode="${2:-defaultExitCode}"
+    local exitCode="${2:-1}"
 
-    log $logLine
+    log "$logLine"
     exit $exitCode
 }
 
@@ -64,6 +63,7 @@ main(){
     local imageName=`basename $(pwd) | tr \'[:upper:]\' \'[:lower:]\'` # Docker image name
     local serviceName="$imageName"                                     # Docker service name
     local lastCommit=`git log --pretty=format:'%h' -n 1`               # Latest git commit hash
+    local language=""
 
     log "Checking if $DOCKER_FILE exists"
     if [ -f $DOCKER_FILE ]; then
@@ -73,6 +73,7 @@ main(){
 
         # Node app
         if [ -f $PACKAGE_JSON_FILE ]; then
+            language="node.js"
             appendToDockerFile "FROM node:10"
             appendToDockerFile "WORKDIR /usr/src/app"
             appendToDockerFile "COPY package*.json ./"
@@ -82,12 +83,18 @@ main(){
             appendToDockerFile "CMD npm start"
         fi
 
+        if [ -f $TEMP_DOCKER_FILE ]; then
+            logFailure "Dockerfile creation failed, aborting"
+        fi
+
+        if [ -z $language ]; then
+            logFailure "Couldn't determinate the language and no Dockerfile was provided, aborting"
+        fi
+
         DOCKER_FILE=$TEMP_DOCKER_FILE
     fi
 
-    if [ -f $TEMP_DOCKER_FILE ]; then
-        logFailure "Dockerfile creation failed, aborting"
-    fi
+    
 
     log "Building $imageName:$lastCommit..."
     docker build --rm=true -t $imageName -f $DOCKER_FILE . # Build and tag the image with "latest" tag
