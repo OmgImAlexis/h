@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+
+NAME="demo"
+FQDN="example.com"
+TARGET="/workspace/$NAME"
+GIT_DIR="/git/$NAME.git"
+BRANCH="master"
+LOG_FILE="/root/post-receive.log"
+DOCKER_FILE="$TARGET/Dockerfile"
+PACKAGE_JSON_FILE="$TARGET/package.json"
+INGRESS_SERVICE_NAME="ingress-controller"
+INGRESS_HTTP_PORT="80"
+INGRESS_HTTPS_PORT="443"
+SERVICE_PORT="8080"
+CADDY_FILE="/etc/caddy/Caddyfile"
+TEMP_DOCKER_FILE=$(mktemp /tmp/Dockerfile.XXXXXXXXX)
+CADDY_UPDATE_SCRIPT="/tmp/CaddyUpdateScript"
+
+log(){
+  local logLine=$1
+
+  echo $logLine
+#   Uncomment the nextline to have the logs saved to a file,
+#   Help with debugging the flow of this file
+#   echo $logLine >> "$LOG_FILE"
+}
+
+appendToDockerFile(){
+  local line=$1
+
+  echo $line >> "$TEMP_DOCKER_FILE"
+}
+appendToCaddyFile(){
+  local line=$1
+
+  printf "$line" >> "$CADDY_FILE"
+}
+appendToCaddyUpdateScript(){
+  local line=$1
+
+  printf "$line" >> "$CADDY_UPDATE_SCRIPT"
+}
+
+main(){
+    local oldrev=$1
+    local newrev=$2
+    local ref=$3
+
+    mkdir -p $TARGET
+    cd $TARGET
+
+    log "Ref $ref received. Deploying ${BRANCH} branch to production..."
+    git --work-tree=$TARGET --git-dir=$GIT_DIR checkout -f $BRANCH
+
+    local imageName=`basename $(pwd) | tr \'[:upper:]\' \'[:lower:]\'` # Docker image name
+    local serviceName="$imageName"                                     # Docker service name
+    local lastCommit=`git log --pretty=format:'%h' -n 1`               # Latest git commit hash
+
+    log "Checking if $DOCKER_FILE exists"
+    if [ -f $DOCKER_FILE ]; then
+        log "Building your Dockerfile..."
+    else
+        log "Building your app from a base image"
+
+        # Node app
+        if [ -f $PACKAGE_JSON_FILE ]; then
+            appendToDockerFile "FROM node:10"
+            appendToDockerFile "WORKDIR /usr/src/app"
+            appendToDockerFile "COPY package*.json ./"
+            appendToDockerFile "RUN npm install"
+            appendToDockerFile "COPY . ."
+            appendToDockerFile "EXPOSE 8080"
+            appendToDockerFile "CMD npm start"
+        fi
+
+        DOCKER_FILE=$TEMP_DOCKER_FILE
+    fi
+
+    log "Building $imageName:$lastCommit..."
+    docker build --rm=true -t $imageName -f $DOCKER_FILE . # Build and tag the image with "latest" tag
+    docker tag $imageName:latest $imageName:$lastCommit  # Add commit tag
+
+    if [ $? -ne 0 ]; then
+        log "Build failed, aborting"
+    fi
+
+    # Check if ingress service is running
+    if [[ "$(docker service inspect ${INGRESS_SERVICE_NAME}  2> /dev/null)" == "[]" ]]; then
+        log "Creating ingress service..."
+
+        # Default Caddyfile
+        printf '{\n    admin :2019\n}\n\n:80 {\n    respond "Please setup this site!"\n}' > /etc/caddy/Caddyfile
+
+        # Create ingress controller
+        docker service create \
+            --quiet \
+            --name $INGRESS_SERVICE_NAME \
+            --restart-condition any \
+            --mount type=volume,source=caddy-data,target=/data \
+            --mount type=volume,source=caddy-config,target=/config \
+            --mount type=bind,source=/etc/caddy/Caddyfile,target=/etc/caddy/Caddyfile \
+            --mount type=bind,source=/tmp/management.sock,target=/tmp/management.sock \
+            --network internal \
+            --publish $INGRESS_HTTP_PORT:80 \
+            --publish $INGRESS_HTTPS_PORT:443 \
+            caddy/caddy
+    fi
+
+    # Check if app service is running
+    if [[ "$(docker service inspect ${serviceName}  2> /dev/null)" != "[]" ]]; then
+        log "Updating service $serviceName..."
+        docker service update --quiet --force --image $imageName:latest $serviceName
+
+        if [ $? -ne 0 ]; then
+            log "Service update failed, aborting"
+        fi
+    else
+        log "Creating service $serviceName..."
+        docker service create --quiet --name $serviceName --env PORT=$SERVICE_PORT --network internal --restart-condition any $imageName:latest
+
+        if [ $? -ne 0 ]; then
+            log "Service creation failed, aborting"
+        fi
+    fi
+
+    # Create update script
+    if [ ! -f "$CADDY_UPDATE_SCRIPT" ]; then
+        log "Creating Caddyfile update script..."
+
+        # Install curl
+        appendToCaddyUpdateScript 'apk add curl'
+        # Reload current Caddyfile
+        appendToCaddyUpdateScript 'cat /etc/caddy/Caddyfile | curl -X POST "http://localhost:2019/load" -H "Content-Type: text/caddyfile" --data-binary @-'
+    fi
+
+    # Create Service entry only if it's not already in the Caddyfile
+    if ! grep -q "http://$serviceName.$FQDN" "$CADDY_FILE"; then
+        log "Updating ingress controller with new Caddyfile..."
+
+        # Update file
+        appendToCaddyFile "http://$serviceName.$FQDN {\nreverse_proxy $serviceName:$SERVICE_PORT\n}\n"
+
+        # Update ingress controller
+        docker exec -i $(docker ps -f name=$INGRESS_SERVICE_NAME --format "{{.ID}}") sh < $CADDY_UPDATE_SCRIPT
+    fi
+
+    log "Deployed successfully, visit http://$serviceName.$FQDN"
+}
+
+while read oldrev newrev ref
+do
+	# only checking out branch you would like to deploy
+	if [[ $ref = refs/heads/$BRANCH ]];
+	then
+        main oldrev newrev ref
+	else
+		log "Ref $ref received. Doing nothing: only the ${BRANCH} branch may be deployed on this server."
+	fi
+done
