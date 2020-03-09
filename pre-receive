@@ -25,6 +25,14 @@ log(){
 #   echo $logLine >> "$LOG_FILE"
 }
 
+logFailure(){
+    local logLine=$1
+    local exitCode="${2:-'1'}"
+
+    log logLine
+    exit exitCode
+}
+
 appendToDockerFile(){
   local line=$1
 
@@ -76,12 +84,16 @@ main(){
         DOCKER_FILE=$TEMP_DOCKER_FILE
     fi
 
+    if [ -f $TEMP_DOCKER_FILE ]; then
+        logFailure "Dockerfile creation failed, aborting"
+    fi
+
     log "Building $imageName:$lastCommit..."
     docker build --rm=true -t $imageName -f $DOCKER_FILE . # Build and tag the image with "latest" tag
     docker tag $imageName:latest $imageName:$lastCommit  # Add commit tag
 
     if [ $? -ne 0 ]; then
-        log "Build failed, aborting"
+        logFailure "Build failed, aborting"
     fi
 
     # Check if ingress service is running
@@ -112,14 +124,14 @@ main(){
         docker service update --quiet --force --image $imageName:latest $serviceName
 
         if [ $? -ne 0 ]; then
-            log "Service update failed, aborting"
+            logFailure "Service update failed, aborting"
         fi
     else
         log "Creating service $serviceName..."
         docker service create --quiet --name $serviceName --env PORT=$SERVICE_PORT --network internal --restart-condition any $imageName:latest
 
         if [ $? -ne 0 ]; then
-            log "Service creation failed, aborting"
+            logFailure "Service creation failed, aborting"
         fi
     fi
 
