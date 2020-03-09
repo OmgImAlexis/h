@@ -17,10 +17,15 @@ mkdir /workspace
 # We'll use this below
 makeRepo() {
     local name=$1
+    local old_pwd=$PWD
 
     mkdir /git/$name.git
     cd /git/$name.git
     git init --bare
+    curl https://raw.githubusercontent.com/OmgImAlexis/h/master/post-receive?token=ABRZHZT2UTBTA6WPUU54CDS6N3L5U --output ./hooks/post-receive
+    sed -i "s/NAME=\"demo\"/NAME=\"$name\"/" ./hooks/post-receive
+    chmod +x ./hooks/post-receive
+    cd $old_pwd
 }
 
 # You'll need todo this for each of the projects you want to host on this machine
