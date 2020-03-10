@@ -92,8 +92,6 @@ main(){
     if [ -f $DOCKER_FILE ]; then
         log "Building your Dockerfile..."
     else
-        log "Building your app from a base image"
-
         # Node app
         if [ isNodeApp ]; then
             language="node"
@@ -118,6 +116,7 @@ main(){
             logFailure "Dockerfile creation failed, aborting"
         fi
 
+        log "Building your app from a $language base image"
         DOCKER_FILE=$TEMP_DOCKER_FILE
     fi
 

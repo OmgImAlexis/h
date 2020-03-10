@@ -5,7 +5,7 @@ display_usage() {
 }
 
 # Display usage if there isn't 2 args
-if [ $# -ne 2 ]; then
+if [ $# -ne 1 ]; then
     display_usage
     exit 1
 fi

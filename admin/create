@@ -28,7 +28,7 @@ makeRepo() {
     mkdir "\$repo_dir"
     cd /git/\$name.git
     git init --bare
-    ls -n ~/hooks/pre-receive ./hooks/pre-receive
+    ln -s ~/hooks/pre-receive ./hooks/pre-receive 
     cd \$old_pwd
     exit 0
 }
