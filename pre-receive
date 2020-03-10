@@ -7,7 +7,6 @@ GIT_DIR="/git/$NAME.git"
 BRANCH="master"
 LOG_FILE="/root/post-receive.log"
 DOCKER_FILE="$TARGET/Dockerfile"
-PACKAGE_JSON_FILE="$TARGET/package.json"
 INGRESS_SERVICE_NAME="ingress-controller"
 INGRESS_HTTP_PORT="80"
 INGRESS_HTTPS_PORT="443"
@@ -49,6 +48,23 @@ appendToCaddyUpdateScript(){
   printf "$line" >> "$CADDY_UPDATE_SCRIPT"
 }
 
+fileExists() {
+    local filePath=$1
+
+    if [ -f "$filePath" ]; then
+        echo "yes"
+    fi
+}
+isNodeApp(){
+    fileExists "$TARGET/package.json"
+}
+isPythonApp(){
+    fileExists "$TARGET/requirements.txt"
+}
+isGoApp(){
+    fileExists "$TARGET/main.go"
+}
+
 main(){
     local oldrev=$1
     local newrev=$2
@@ -59,6 +75,10 @@ main(){
 
     log "Ref $ref received. Deploying ${BRANCH} branch to production..."
     git --work-tree=$TARGET --git-dir=$GIT_DIR checkout -f $BRANCH
+
+    if [ $? -ne 0 ]; then
+        logFailure "Checkout failed, aborting"
+    fi
 
     local imageName=`basename $(pwd) | tr \'[:upper:]\' \'[:lower:]\'` # Docker image name
     local serviceName="$imageName"                                     # Docker service name
@@ -72,8 +92,8 @@ main(){
         log "Building your app from a base image"
 
         # Node app
-        if [ -f $PACKAGE_JSON_FILE ]; then
-            language="node.js"
+        if [ isNodeApp ]; then
+            language="node"
             appendToDockerFile "FROM node:10"
             appendToDockerFile "WORKDIR /usr/src/app"
             appendToDockerFile "COPY package*.json ./"
@@ -81,20 +101,22 @@ main(){
             appendToDockerFile "COPY . ."
             appendToDockerFile "EXPOSE 8080"
             appendToDockerFile "CMD npm start"
-        fi
-
-        if [ -f $TEMP_DOCKER_FILE ]; then
-            logFailure "Dockerfile creation failed, aborting"
+        else if [ isPythonApp ]; then
+            language="python"
+        else if [ isGoApp ]; then
+            language="go"
         fi
 
         if [ -z $language ]; then
             logFailure "Couldn't determinate the language and no Dockerfile was provided, aborting"
         fi
 
+        if [ -f $TEMP_DOCKER_FILE ]; then
+            logFailure "Dockerfile creation failed, aborting"
+        fi
+
         DOCKER_FILE=$TEMP_DOCKER_FILE
     fi
-
-    
 
     log "Building $imageName:$lastCommit..."
     docker build --rm=true -t $imageName -f $DOCKER_FILE . # Build and tag the image with "latest" tag
