@@ -101,9 +101,9 @@ main(){
             appendToDockerFile "COPY . ."
             appendToDockerFile "EXPOSE 8080"
             appendToDockerFile "CMD npm start"
-        else if [ isPythonApp ]; then
+        elif [ isPythonApp ]; then
             language="python"
-        else if [ isGoApp ]; then
+        elif [ isGoApp ]; then
             language="go"
         fi
 
