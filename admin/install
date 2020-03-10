@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+display_usage() {
+    echo "$0 user@server-domain.tld"
+}
+
+# Display usage if there isn't 2 args
+if [ $# -ne 2 ]; then
+    display_usage
+    exit 1
+fi
+
+ssh -q -tt $1 <<EOF > /dev/null
+mkdir -p /git
+mkdir -p /workspace
+mkdir -p ~/hooks
+
+curl -L https://github.com/OmgImAlexis/h/raw/master/pre-receive --output ~/hooks/pre-receive
+exit 0
+EOF
+
+if [ $? -ne 0 ]; then
+    echo "Failed installing h."
+    echo "Check permissions before running again."
+else
+    echo "Installed h successfull, next checkout the \"create\" command."
+fi

@@ -3,38 +3,18 @@ Hosted apps done simply.
 
 ## Installation
 
-I would suggest setting up your `origin` remote first so if you're using Github make sure to `git clone` before doing this.
-
 ```bash
-# On the client connect to the server
-ssh root@server_name.tld
+git clone https://github.com/omgimalexis/h ~/code/h && cd ~/code/h
 
-# On the server run the following
-mkdir /git
-mkdir /workspace
+# Setup server
+./admin/install user@server-domain.tld
 
-# Run this to give yourself a helper function
-# We'll use this below
-makeRepo() {
-    local name=$1
-    local old_pwd=$PWD
+# Setup app on server
+./admin/create user@server-domain.tld demo
 
-    mkdir /git/$name.git
-    cd /git/$name.git
-    git init --bare
-    curl -L https://github.com/OmgImAlexis/h/raw/master/pre-receive --output ./hooks/pre-receive
-    sed -i "s/NAME=\"demo\"/NAME=\"$name\"/" ./hooks/pre-receive
-    chmod +x ./hooks/pre-receive
-    cd $old_pwd
-}
+# Deploy app
+cd ~/code/demo
+git push production master
 
-# You'll need todo this for each of the projects you want to host on this machine
-makeRepo "demo"
-makeRepo "project1"
-
-# Back on the client
-cd ~/code/demo # Replace with your own
-git remote add production root@server_name.tld:/git/demo
+# Profit ?
 ```
-
-You should now be able to run `git push production` which will deploy your app to your server.

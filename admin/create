@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+display_usage() {
+    echo "$0 user@server-domain.tld demo"
+}
+
+# Display usage if there isn't 2 args
+if [ $# -ne 2 ]; then
+    display_usage
+    exit 1
+fi
+
+# Name of the app we're creating
+NAME=$2
+
+# Create project on server
+ssh -q -tt $1 <<EOF > /dev/null
+makeRepo() {
+    local name=\$1
+    local old_pwd=\$PWD
+    local repo_dir="/git/\$name.git"
+
+    if [ -d "\$repo_dir" ]; then
+        echo "A project is already deployed using this name."
+        exit 1
+    fi
+
+    mkdir "\$repo_dir"
+    cd /git/\$name.git
+    git init --bare
+    ls -n ~/hooks/pre-receive ./hooks/pre-receive
+    cd \$old_pwd
+    exit 0
+}
+
+makeRepo "${NAME}"
+EOF
+
+if [ $? -ne 0 ]; then
+    echo "Failed creating app."
+    echo "A project is already deployed using this name."
+else
+    echo "Created \"$NAME\" successfully. Run the following in your local repo."
+    echo "git remote add production $1:/git/$NAME.git"
+    echo ""
+    echo "To deploy run \"git push master production\""
+fi
